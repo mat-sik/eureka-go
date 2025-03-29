@@ -64,6 +64,21 @@ func (s *Store) Get(name string) []HostStatus {
 	return result
 }
 
+func (s *Store) GetNamesToIps() map[string][]string {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	result := make(map[string][]string, len(s.nameToHostStatuses))
+	for name, hostStatuses := range s.nameToHostStatuses {
+		result[name] = make([]string, 0, len(hostStatuses))
+		for ipString := range hostStatuses {
+			result[name] = append(result[name], ipString)
+		}
+	}
+
+	return result
+}
+
 func NewStore() Store {
 	return Store{
 		nameToHostStatuses: make(map[string]map[string]Status),
