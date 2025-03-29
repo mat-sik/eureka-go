@@ -6,28 +6,32 @@ import (
 )
 
 type Store struct {
-	nameToIp map[string]map[string]struct{}
-	lock     *sync.RWMutex
+	nameToHostStatuses map[string]map[string]Status
+	lock               *sync.RWMutex
 }
 
-func (s *Store) Add(name string, ip net.IP) {
+func (s *Store) addNew(name string, ip net.IP) {
+	s.Add(name, ip, Unknown)
+}
+
+func (s *Store) Add(name string, ip net.IP, status Status) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	ips, ok := s.nameToIp[name]
+	hostStatuses, ok := s.nameToHostStatuses[name]
 	if !ok {
-		ips = make(map[string]struct{})
-		s.nameToIp[name] = ips
+		hostStatuses = make(map[string]Status)
+		s.nameToHostStatuses[name] = hostStatuses
 	}
 
-	ips[ip.String()] = struct{}{}
+	hostStatuses[ip.String()] = status
 }
 
 func (s *Store) Remove(name string, ip net.IP) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	ips, ok := s.nameToIp[name]
+	ips, ok := s.nameToHostStatuses[name]
 	if !ok {
 		return false
 	}
@@ -37,7 +41,7 @@ func (s *Store) Remove(name string, ip net.IP) bool {
 		delete(ips, stringIP)
 
 		if len(ips) == 0 {
-			delete(s.nameToIp, name)
+			delete(s.nameToHostStatuses, name)
 		}
 
 		return true
@@ -45,15 +49,18 @@ func (s *Store) Remove(name string, ip net.IP) bool {
 	return false
 }
 
-func (s *Store) Get(name string) []net.IP {
+func (s *Store) Get(name string) []HostStatus {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	ips, _ := s.nameToIp[name]
+	hostStatuses, _ := s.nameToHostStatuses[name]
 
-	result := make([]net.IP, 0, len(ips))
-	for ip := range ips {
-		result = append(result, net.ParseIP(ip))
+	result := make([]HostStatus, 0, len(hostStatuses))
+	for ipString := range hostStatuses {
+		result = append(result, HostStatus{
+			IP:     ipString,
+			Status: hostStatuses[ipString],
+		})
 	}
 
 	return result
@@ -61,7 +68,7 @@ func (s *Store) Get(name string) []net.IP {
 
 func NewStore() Store {
 	return Store{
-		nameToIp: make(map[string]map[string]struct{}),
-		lock:     &sync.RWMutex{},
+		nameToHostStatuses: make(map[string]map[string]Status),
+		lock:               &sync.RWMutex{},
 	}
 }

@@ -1,7 +1,5 @@
 package name
 
-import "net"
-
-type getIPResponse struct {
-	IPs []net.IP `json:"ips"`
+type getHostStatusesResponse struct {
+	HostStatuses []HostStatus `json:"host_statuses"`
 }

@@ -12,9 +12,9 @@ import (
 func main() {
 	store := name.NewStore()
 
-	registerIPHandler := name.RegisterIPHandler{Store: store}
-	removeIPHandler := name.RemoveIpHandler{Store: store}
-	getIPHandler := name.GetIPHandler{Store: store}
+	registerIPHandler := name.RegisterHostHandler{Store: store}
+	removeIPHandler := name.RemoveHostHandler{Store: store}
+	getIPHandler := name.GetHostStatusesHandler{Store: store}
 
 	mux := http.NewServeMux()
 

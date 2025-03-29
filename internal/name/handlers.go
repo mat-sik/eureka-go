@@ -7,11 +7,11 @@ import (
 	"net/http"
 )
 
-type RegisterIPHandler struct {
+type RegisterHostHandler struct {
 	Store
 }
 
-func (h RegisterIPHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+func (h RegisterHostHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	var regReq registerIPRequest
 	if err := json.NewDecoder(request.Body).Decode(&regReq); err != nil {
 		http.Error(writer, err.Error(), http.StatusInternalServerError)
@@ -24,15 +24,15 @@ func (h RegisterIPHandler) ServeHTTP(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	h.Store.Add(regReq.Name, ip)
+	h.Store.addNew(regReq.Name, ip)
 	writer.WriteHeader(http.StatusCreated)
 }
 
-type RemoveIpHandler struct {
+type RemoveHostHandler struct {
 	Store
 }
 
-func (h RemoveIpHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+func (h RemoveHostHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	var remReq removeIPRequest
 	if err := json.NewDecoder(request.Body).Decode(&remReq); err != nil {
 		http.Error(writer, err.Error(), http.StatusInternalServerError)
@@ -56,16 +56,16 @@ func parseIP(ip string) (net.IP, error) {
 	return parsedIP, nil
 }
 
-type GetIPHandler struct {
+type GetHostStatusesHandler struct {
 	Store
 }
 
-func (h GetIPHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+func (h GetHostStatusesHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	name := request.PathValue("name")
 
-	ips := h.Store.Get(name)
+	hostStatuses := h.Store.Get(name)
 
-	resp := getIPResponse{ips}
+	resp := getHostStatusesResponse{hostStatuses}
 	if err := json.NewEncoder(writer).Encode(resp); err != nil {
 		http.Error(writer, err.Error(), http.StatusInternalServerError)
 	}
