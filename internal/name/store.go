@@ -1,7 +1,6 @@
 package name
 
 import (
-	"net"
 	"sync"
 )
 
@@ -10,11 +9,11 @@ type Store struct {
 	lock               *sync.RWMutex
 }
 
-func (s *Store) addNew(name string, ip net.IP) {
-	s.Add(name, ip, Unknown)
+func (s *Store) addNew(name string, host string) {
+	s.Put(name, host, Unknown)
 }
 
-func (s *Store) Add(name string, ip net.IP, status Status) {
+func (s *Store) Put(name string, host string, status Status) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -24,10 +23,10 @@ func (s *Store) Add(name string, ip net.IP, status Status) {
 		s.nameToHostStatuses[name] = hostStatuses
 	}
 
-	hostStatuses[ip.String()] = status
+	hostStatuses[host] = status
 }
 
-func (s *Store) Remove(name string, ip net.IP) bool {
+func (s *Store) Remove(name string, host string) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -36,9 +35,8 @@ func (s *Store) Remove(name string, ip net.IP) bool {
 		return false
 	}
 
-	stringIP := ip.String()
-	if _, ok = ips[stringIP]; ok {
-		delete(ips, stringIP)
+	if _, ok = ips[host]; ok {
+		delete(ips, host)
 
 		if len(ips) == 0 {
 			delete(s.nameToHostStatuses, name)
