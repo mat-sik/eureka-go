@@ -10,7 +10,9 @@ import (
 )
 
 func main() {
-	s := server.NewServer(props.NewServerProperties(), registry.NewHandler())
+	store := registry.NewStore()
+	handler := registry.NewHandler(store)
+	s := server.NewServer(props.NewServerProperties(), handler)
 	if err := s.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		slog.Error(err.Error())
 	}

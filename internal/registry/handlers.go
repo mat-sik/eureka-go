@@ -62,9 +62,7 @@ func (h GetHostStatusesHandler) ServeHTTP(writer http.ResponseWriter, request *h
 	}
 }
 
-func NewHandler() http.Handler {
-	store := NewStore()
-
+func NewHandler(store Store) http.Handler {
 	mux := http.NewServeMux()
 
 	registerIPHandler := RegisterHostHandler{Store: store}
