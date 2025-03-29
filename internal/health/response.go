@@ -1,7 +1,9 @@
 package health
 
-import "github.com/mat-sik/eureka-go/internal/name"
+import (
+	"github.com/mat-sik/eureka-go/internal/registry"
+)
 
 type Response struct {
-	Status name.Status `json:"status"`
+	Status registry.Status `json:"status"`
 }

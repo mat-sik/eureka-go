@@ -1,4 +1,4 @@
-package name
+package registry
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ type RegisterHostHandler struct {
 }
 
 func (h RegisterHostHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	var regReq RegisterIPRequest
+	var regReq RegisterHostRequest
 	if err := json.NewDecoder(request.Body).Decode(&regReq); err != nil {
 		http.Error(writer, err.Error(), http.StatusInternalServerError)
 		return
@@ -23,7 +23,7 @@ func (h RegisterHostHandler) ServeHTTP(writer http.ResponseWriter, request *http
 		return
 	}
 
-	h.Store.addNew(regReq.Name, regReq.Host)
+	h.Store.addNew(regReq.ServiceID, regReq.Host)
 	writer.WriteHeader(http.StatusCreated)
 }
 
@@ -32,7 +32,7 @@ type RemoveHostHandler struct {
 }
 
 func (h RemoveHostHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	var remReq RemoveIPRequest
+	var remReq RemoveHostRequest
 	if err := json.NewDecoder(request.Body).Decode(&remReq); err != nil {
 		http.Error(writer, err.Error(), http.StatusInternalServerError)
 		return
@@ -44,7 +44,7 @@ func (h RemoveHostHandler) ServeHTTP(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	h.Store.Remove(remReq.Name, remReq.Host)
+	h.Store.Remove(remReq.ServiceID, remReq.Host)
 }
 
 type GetHostStatusesHandler struct {
@@ -52,7 +52,7 @@ type GetHostStatusesHandler struct {
 }
 
 func (h GetHostStatusesHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	name := request.PathValue("name")
+	name := request.PathValue("serviceID")
 
 	hostStatuses := h.Store.Get(name)
 
@@ -60,4 +60,20 @@ func (h GetHostStatusesHandler) ServeHTTP(writer http.ResponseWriter, request *h
 	if err := json.NewEncoder(writer).Encode(resp); err != nil {
 		http.Error(writer, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func NewHandler() http.Handler {
+	store := NewStore()
+
+	mux := http.NewServeMux()
+
+	registerIPHandler := RegisterHostHandler{Store: store}
+	removeIPHandler := RemoveHostHandler{Store: store}
+	getIPHandler := GetHostStatusesHandler{Store: store}
+
+	mux.Handle("POST /service-id/register", registerIPHandler)
+	mux.Handle("POST /service-id/remove", removeIPHandler)
+	mux.Handle("GET /service-id/{serviceID}", getIPHandler)
+
+	return mux
 }

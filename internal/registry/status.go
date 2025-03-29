@@ -1,8 +1,8 @@
-package name
+package registry
 
 type HostStatus struct {
-	IP     string `json:"ip"`
-	Status `json:"status"`
+	Host   string `json:"host"`
+	Status Status `json:"status"`
 }
 
 type Status string
