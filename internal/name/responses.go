@@ -1,5 +1,5 @@
 package name
 
-type getHostStatusesResponse struct {
+type GetHostStatusesResponse struct {
 	HostStatuses []HostStatus `json:"host_statuses"`
 }

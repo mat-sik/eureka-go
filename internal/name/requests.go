@@ -1,11 +1,11 @@
 package name
 
-type registerIPRequest struct {
+type RegisterIPRequest struct {
 	Name string `json:"name"`
-	IP   string `json:"ip"`
+	Host string `json:"host"`
 }
 
-type removeIPRequest struct {
+type RemoveIPRequest struct {
 	Name string `json:"name"`
-	IP   string `json:"ip"`
+	Host string `json:"host"`
 }
