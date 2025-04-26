@@ -26,39 +26,39 @@ func Test_Checker(t *testing.T) {
 	eurekaServer := httptest.NewServer(registry.NewHandler(store))
 	defer eurekaServer.Close()
 
-	serverOneFailAfter := 2
-	serverOneWaitCh := make(chan struct{})
-	serverOne := httptest.NewServer(newFailAfterHealthCheckHandler(ctx, serverOneWaitCh, serverOneFailAfter))
-	defer serverOne.Close()
-	hostOne := getHost(t, serverOne.URL)
+	failAfterServerWaitCh := make(chan struct{})
+	failAfter := 2
+	failAfterServer := httptest.NewServer(newFailAfterHealthCheckHandler(ctx, failAfterServerWaitCh, failAfter))
+	defer failAfterServer.Close()
+	failAfterServerHost := getHost(t, failAfterServer.URL)
 
-	serverTwoChangeStatusAfter := 1
-	serverTwoWaitCh := make(chan struct{})
-	serverTwoInitialStatus := registry.Healthy
-	serverTwoTargetStatus := registry.Down
-	serverTwo := httptest.NewServer(newChangeStatusAfterHealthCheckHandler(
+	changeStatusServerWaitCh := make(chan struct{})
+	changeStatusServerInitialStatus := registry.Healthy
+	changeStatusServerTargetStatus := registry.Down
+	changeStatusAfter := 1
+	changeStatusServer := httptest.NewServer(newChangeStatusAfterHealthCheckHandler(
 		ctx,
-		serverTwoWaitCh,
-		serverTwoInitialStatus,
-		serverTwoTargetStatus,
-		serverTwoChangeStatusAfter,
+		changeStatusServerWaitCh,
+		changeStatusServerInitialStatus,
+		changeStatusServerTargetStatus,
+		changeStatusAfter,
 	))
-	defer serverTwo.Close()
-	hostTwo := getHost(t, serverTwo.URL)
+	defer changeStatusServer.Close()
+	changeStatusServerHost := getHost(t, changeStatusServer.URL)
 
-	serverThreeWaitCh := make(chan struct{})
-	serverThreeStatus := registry.Healthy
-	serverThree := httptest.NewServer(newConstantStatusHealthCheckHandler(ctx, serverThreeWaitCh, serverThreeStatus))
-	defer serverThree.Close()
-	hostThree := getHost(t, serverThree.URL)
+	constantStatusServerWaitCh := make(chan struct{})
+	constantStatus := registry.Healthy
+	constantStatusServer := httptest.NewServer(newConstantStatusHealthCheckHandler(ctx, constantStatusServerWaitCh, constantStatus))
+	defer constantStatusServer.Close()
+	constantStatusServerHost := getHost(t, constantStatusServer.URL)
 
 	serviceIDOne := "foo"
 	serviceIDTwo := "bar"
 
 	// when
-	doRegister(t, eurekaServer.URL, serviceIDOne, hostOne)
-	doRegister(t, eurekaServer.URL, serviceIDTwo, hostTwo)
-	doRegister(t, eurekaServer.URL, serviceIDTwo, hostThree)
+	doRegister(t, eurekaServer.URL, serviceIDOne, failAfterServerHost)
+	doRegister(t, eurekaServer.URL, serviceIDTwo, changeStatusServerHost)
+	doRegister(t, eurekaServer.URL, serviceIDTwo, constantStatusServerHost)
 
 	errCh := make(chan error)
 
@@ -69,37 +69,37 @@ func Test_Checker(t *testing.T) {
 		}
 	}()
 
-	serverOneNotifyCounter := 0
-	serverTwoNotifyCounter := 0
-	serverThreeNotifyCounter := 0
+	failAfterServerNotifyCounter := 0
+	changeStatusServerNotifyCounter := 0
+	constantServerNotifyCounter := 0
 
-	i := 0
+	allNotifyCounter := 0
 
 	for {
 		select {
 		case err := <-errCh:
 			t.Fatal(err)
-		case <-serverOneWaitCh:
-			i++
-			serverOneNotifyCounter++
-			if serverOneNotifyCounter == runCheckTimes {
-				serverOneWaitCh = nil
+		case <-failAfterServerWaitCh:
+			allNotifyCounter++
+			failAfterServerNotifyCounter++
+			if failAfterServerNotifyCounter == runCheckTimes {
+				failAfterServerWaitCh = nil
 			}
-		case <-serverTwoWaitCh:
-			i++
-			serverTwoNotifyCounter++
-			if serverTwoNotifyCounter == runCheckTimes {
-				serverTwoWaitCh = nil
+		case <-changeStatusServerWaitCh:
+			allNotifyCounter++
+			changeStatusServerNotifyCounter++
+			if changeStatusServerNotifyCounter == runCheckTimes {
+				changeStatusServerWaitCh = nil
 			}
-		case <-serverThreeWaitCh:
-			i++
-			serverThreeNotifyCounter++
-			if serverThreeNotifyCounter == runCheckTimes {
-				serverThreeWaitCh = nil
+		case <-constantStatusServerWaitCh:
+			allNotifyCounter++
+			constantServerNotifyCounter++
+			if constantServerNotifyCounter == runCheckTimes {
+				constantStatusServerWaitCh = nil
 			}
 		}
-		if serverOneWaitCh == nil && serverTwoWaitCh == nil && serverThreeWaitCh == nil {
-			slog.Info("stop", "i", i)
+		if failAfterServerWaitCh == nil && changeStatusServerWaitCh == nil && constantStatusServerWaitCh == nil {
+			slog.Info("stop", "allNotifyCounter", allNotifyCounter)
 			break
 		}
 	}
@@ -108,33 +108,33 @@ func Test_Checker(t *testing.T) {
 	cancel()
 
 	// then
-	loggedData := mock.getLoggedData()
+	loggedStatuses := mock.getLoggedStatuses()
 
-	serverOneData := loggedData[hostOne][:runCheckTimes]
-	if len(serverOneData) != runCheckTimes {
-		t.Fatalf("failAfter got: %d want: %d", len(loggedData[hostOne]), runCheckTimes)
+	failAfterServerLoggedStatuses := loggedStatuses[failAfterServerHost][:runCheckTimes]
+	if len(failAfterServerLoggedStatuses) != runCheckTimes {
+		t.Fatalf("failAfterServerLoggedStatuses length got: %d want: %d", len(loggedStatuses[failAfterServerHost]), runCheckTimes)
 	}
-	expectedServerOneData := []registry.Status{registry.Healthy, registry.Healthy, registry.Down, registry.Down}
-	if !reflect.DeepEqual(serverOneData, expectedServerOneData) {
-		t.Fatalf("failAfter got: %v want: %v", serverOneData, expectedServerOneData)
-	}
-
-	serverTwoData := loggedData[hostTwo][:runCheckTimes]
-	if len(serverTwoData) != runCheckTimes {
-		t.Fatalf("changeStatusAfter got: %d want: %d", len(serverTwoData), runCheckTimes)
-	}
-	expectedServerTwoData := []registry.Status{registry.Healthy, registry.Healthy, registry.Down, registry.Down}
-	if !reflect.DeepEqual(expectedServerTwoData, expectedServerOneData) {
-		t.Fatalf("changeStatusAfter got: %v want: %v", serverTwoData, expectedServerTwoData)
+	expectedFailAfterServerLoggedStatuses := []registry.Status{registry.Healthy, registry.Healthy, registry.Down, registry.Down}
+	if !reflect.DeepEqual(failAfterServerLoggedStatuses, expectedFailAfterServerLoggedStatuses) {
+		t.Fatalf("failAfterServerLoggedStatuses got: %v want: %v", failAfterServerLoggedStatuses, expectedFailAfterServerLoggedStatuses)
 	}
 
-	serverThreeData := loggedData[hostThree][:runCheckTimes]
-	if len(serverThreeData) != runCheckTimes {
-		t.Fatalf("constant got: %d want: %d", len(serverThreeData), runCheckTimes)
+	changeStatusServerLoggedStatuses := loggedStatuses[changeStatusServerHost][:runCheckTimes]
+	if len(changeStatusServerLoggedStatuses) != runCheckTimes {
+		t.Fatalf("changeStatusServerLoggedStatuses length got: %d want: %d", len(changeStatusServerLoggedStatuses), runCheckTimes)
 	}
-	expectedServerThreeData := []registry.Status{registry.Healthy, registry.Healthy, registry.Healthy, registry.Healthy}
-	if !reflect.DeepEqual(expectedServerThreeData, expectedServerThreeData) {
-		t.Fatalf("constant got: %v want: %v", serverThreeData, expectedServerThreeData)
+	expectedChangeStatusServerLoggedStatuses := []registry.Status{registry.Healthy, registry.Healthy, registry.Down, registry.Down}
+	if !reflect.DeepEqual(expectedChangeStatusServerLoggedStatuses, expectedFailAfterServerLoggedStatuses) {
+		t.Fatalf("changeStatusServerLoggedStatuses got: %v want: %v", changeStatusServerLoggedStatuses, expectedChangeStatusServerLoggedStatuses)
+	}
+
+	constantStatusServerLoggedStatuses := loggedStatuses[constantStatusServerHost][:runCheckTimes]
+	if len(constantStatusServerLoggedStatuses) != runCheckTimes {
+		t.Fatalf("constantStatusServerLoggedStatuses length got: %d want: %d", len(constantStatusServerLoggedStatuses), runCheckTimes)
+	}
+	expectedConstantStatusServerLoggedStatuses := []registry.Status{registry.Healthy, registry.Healthy, registry.Healthy, registry.Healthy}
+	if !reflect.DeepEqual(expectedConstantStatusServerLoggedStatuses, expectedConstantStatusServerLoggedStatuses) {
+		t.Fatalf("constantStatusServerLoggedStatuses got: %v want: %v", constantStatusServerLoggedStatuses, expectedConstantStatusServerLoggedStatuses)
 	}
 }
 
@@ -185,16 +185,15 @@ func newChangeStatusAfterHealthCheckHandler(
 	return waitChanHandler(ctx, waitCh, changeStatusAfterHandler(initialStatus, targetStatus, after))
 }
 
-var waitChCounter = atomic.Int32{}
-
 func waitChanHandler(ctx context.Context, waitCh chan<- struct{}, handler http.Handler) http.Handler {
+	waitChCounter := atomic.Int32{}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			select {
 			case <-ctx.Done():
 				slog.Info("DONE")
 			case waitCh <- struct{}{}:
-				slog.Info("NOTIFIED", "i", waitChCounter.Add(1))
+				slog.Info("NOTIFIED", "invocation", waitChCounter.Add(1))
 			}
 		}()
 		handler.ServeHTTP(w, r)
@@ -274,16 +273,16 @@ func (m *mockStore) Put(serviceID string, host string, status registry.Status) {
 	m.store.Put(serviceID, host, status)
 }
 
-func (m *mockStore) getLoggedData() map[string][]registry.Status {
+func (m *mockStore) getLoggedStatuses() map[string][]registry.Status {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	clone := make(map[string][]registry.Status, len(m.hostToStatus))
+	loggedStatuses := make(map[string][]registry.Status, len(m.hostToStatus))
 	for k, v := range m.hostToStatus {
-		clone[k] = v
+		loggedStatuses[k] = v
 	}
 
-	return clone
+	return loggedStatuses
 }
 
 var (
