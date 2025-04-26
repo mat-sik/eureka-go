@@ -3,41 +3,73 @@ package health
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/mat-sik/eureka-go/internal/registry"
 	"net/http"
+	"sync"
+	"time"
 )
 
 type Checker struct {
-	client *http.Client
-	store  registry.Store
+	client        *http.Client
+	ticker        *time.Ticker
+	statusUpdater statusUpdater
 }
 
-func (c *Checker) Run(ctx context.Context) error {
+type statusUpdater interface {
+	serviceIDsToHostsGetter
+	statusPutter
+}
+
+func (c Checker) Run(ctx context.Context) error {
 	for {
-		if ctx.Done() != nil {
-			return nil
-		}
-		for serviceID, hosts := range c.store.GetServiceIDsToHosts() {
-			for _, host := range hosts {
-				if err := c.checkJob(ctx, serviceID, host); err != nil {
-					return err
-				}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-c.ticker.C:
+			if err := c.checkAll(ctx); err != nil {
+				return err
 			}
 		}
 	}
 }
 
-func (c *Checker) checkJob(ctx context.Context, serviceID string, host string) error {
-	status, err := c.check(ctx, host)
-	if err != nil {
-		return err
-	}
-	c.store.Put(serviceID, host, status)
-	return nil
+type serviceIDsToHostsGetter interface {
+	GetServiceIDsToHosts() map[string][]string
 }
 
-func (c *Checker) check(ctx context.Context, host string) (registry.Status, error) {
+func (c Checker) checkAll(ctx context.Context) error {
+	serviceIDsToHosts := c.statusUpdater.GetServiceIDsToHosts()
+	wg := &sync.WaitGroup{}
+	errCh := make(chan error, jobCount(serviceIDsToHosts))
+	defer close(errCh)
+	for serviceID, hosts := range serviceIDsToHosts {
+		for _, host := range hosts {
+			wg.Add(1)
+			go c.checkJob(ctx, wg, errCh, serviceID, host)
+		}
+	}
+	wg.Wait()
+
+	return collectErrs(errCh)
+}
+
+type statusPutter interface {
+	Put(serviceID string, host string, status registry.Status)
+}
+
+func (c Checker) checkJob(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error, serviceID string, host string) {
+	defer wg.Done()
+	status, err := c.check(ctx, host)
+	if err != nil {
+		errCh <- err
+		return
+	}
+	c.statusUpdater.Put(serviceID, host, status)
+}
+
+func (c Checker) check(ctx context.Context, host string) (registry.Status, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getHealthAddr(host), nil)
 	if err != nil {
 		return registry.Unknown, err
@@ -48,6 +80,10 @@ func (c *Checker) check(ctx context.Context, host string) (registry.Status, erro
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return registry.Down, nil
+	}
+
 	var healthResp Response
 	if err = json.NewDecoder(resp.Body).Decode(&healthResp); err != nil {
 		return registry.Unknown, err
@@ -56,6 +92,30 @@ func (c *Checker) check(ctx context.Context, host string) (registry.Status, erro
 	return healthResp.Status, nil
 }
 
+func jobCount(serviceIDsToHosts map[string][]string) int {
+	count := 0
+	for _, hosts := range serviceIDsToHosts {
+		count += len(hosts)
+	}
+	return count
+}
+
+func collectErrs(errCh <-chan error) error {
+	errs := make([]error, 0, len(errCh))
+	for i := 0; i < len(errCh); i++ {
+		errs = append(errs, <-errCh)
+	}
+	return errors.Join(errs...)
+}
+
 func getHealthAddr(host string) string {
 	return fmt.Sprintf("http://%s/health", host)
+}
+
+func NewChecker(client *http.Client, statusUpdater statusUpdater, duration time.Duration) Checker {
+	return Checker{
+		client:        client,
+		statusUpdater: statusUpdater,
+		ticker:        time.NewTicker(duration),
+	}
 }

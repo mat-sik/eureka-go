@@ -6,7 +6,7 @@ import (
 
 type Store struct {
 	serviceIDToHostStatuses map[string]map[string]Status
-	lock                    *sync.RWMutex
+	lock                    sync.RWMutex
 }
 
 func (s *Store) addNew(serviceID string, host string) {
@@ -79,9 +79,14 @@ func (s *Store) GetServiceIDsToHosts() map[string][]string {
 	return result
 }
 
-func NewStore() Store {
-	return Store{
-		serviceIDToHostStatuses: make(map[string]map[string]Status),
-		lock:                    &sync.RWMutex{},
+func NewStore() *Store {
+	serviceIdToHostStatuses := make(map[string]map[string]Status)
+	return NewStoreFrom(serviceIdToHostStatuses)
+}
+
+func NewStoreFrom(serviceIdToHostStatuses map[string]map[string]Status) *Store {
+	return &Store{
+		serviceIDToHostStatuses: serviceIdToHostStatuses,
+		lock:                    sync.RWMutex{},
 	}
 }

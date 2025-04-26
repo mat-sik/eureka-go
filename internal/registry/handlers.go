@@ -2,12 +2,13 @@ package registry
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net"
 	"net/http"
 )
 
 type RegisterHostHandler struct {
-	Store
+	store *Store
 }
 
 func (h RegisterHostHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -23,12 +24,12 @@ func (h RegisterHostHandler) ServeHTTP(writer http.ResponseWriter, request *http
 		return
 	}
 
-	h.Store.addNew(regReq.ServiceID, regReq.Host)
+	h.store.addNew(regReq.ServiceID, regReq.Host)
 	writer.WriteHeader(http.StatusCreated)
 }
 
 type RemoveHostHandler struct {
-	Store
+	store *Store
 }
 
 func (h RemoveHostHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -44,30 +45,37 @@ func (h RemoveHostHandler) ServeHTTP(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	h.Store.Remove(remReq.ServiceID, remReq.Host)
+	h.store.Remove(remReq.ServiceID, remReq.Host)
 }
 
 type GetHostStatusesHandler struct {
-	Store
+	store *Store
 }
 
 func (h GetHostStatusesHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	name := request.PathValue("serviceID")
 
-	hostStatuses := h.Store.Get(name)
+	hostStatuses := h.store.Get(name)
 
 	resp := GetHostStatusesResponse{hostStatuses}
-	if err := json.NewEncoder(writer).Encode(resp); err != nil {
+	respBody, err := json.Marshal(resp)
+	if err != nil {
 		http.Error(writer, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	if _, err = writer.Write(respBody); err != nil {
+		slog.Error("Failed to respond", "response:", resp, "err:", err)
 	}
 }
 
-func NewHandler(store Store) http.Handler {
+func NewHandler(store *Store) http.Handler {
 	mux := http.NewServeMux()
 
-	registerIPHandler := RegisterHostHandler{Store: store}
-	removeIPHandler := RemoveHostHandler{Store: store}
-	getIPHandler := GetHostStatusesHandler{Store: store}
+	registerIPHandler := &RegisterHostHandler{store: store}
+	removeIPHandler := &RemoveHostHandler{store: store}
+	getIPHandler := &GetHostStatusesHandler{store: store}
 
 	mux.Handle("POST /service-id/register", registerIPHandler)
 	mux.Handle("POST /service-id/remove", removeIPHandler)

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"sync"
 	"testing"
 )
 
@@ -368,10 +367,7 @@ func cleanUp() {
 
 var (
 	serviceIDToHostStatuses = make(map[string]map[string]Status)
-	handler                 = NewHandler(Store{
-		serviceIDToHostStatuses: serviceIDToHostStatuses,
-		lock:                    &sync.RWMutex{},
-	})
-	buffer  = bytes.NewBuffer(make([]byte, 0, 1024))
-	encoder = json.NewEncoder(buffer)
+	handler                 = NewHandler(NewStoreFrom(serviceIDToHostStatuses))
+	buffer                  = bytes.NewBuffer(make([]byte, 0, 1024))
+	encoder                 = json.NewEncoder(buffer)
 )
