@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/mat-sik/eureka-go/internal/registry"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -60,12 +61,14 @@ type statusPutter interface {
 }
 
 func (c Checker) checkJob(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error, serviceID string, host string) {
+	slog.Info("running checker job", "serviceID", serviceID, "host", host)
 	defer wg.Done()
 	status, err := c.check(ctx, host)
 	if err != nil {
 		errCh <- err
 		return
 	}
+	slog.Info("checker job finished", "serviceID", serviceID, "host", host, "status", status)
 	c.statusUpdater.Put(serviceID, host, status)
 }
 
@@ -78,7 +81,11 @@ func (c Checker) check(ctx context.Context, host string) (registry.Status, error
 	if err != nil {
 		return registry.Unknown, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err = resp.Body.Close(); err != nil {
+			slog.Warn("failed to close response body", "err", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return registry.Down, nil
